@@ -108,6 +108,8 @@ int main (int argc, char *argv[])
 		goto error;
 	}
 
+	printf("s: %i \n", s);
+
     // get write PID cmnd
     write_pid_msg(&frame);
 
