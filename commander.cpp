@@ -246,6 +246,63 @@ class ServoCommander {
 
         return stat;
     }
+
+
+    int torque_command(float desired_current){
+
+        // input: float of desired current, in Amps.
+        // current is +/- 2000, corresp to +/- 32A
+        // TODO: handle warnings of max control input in ROS (in controller)
+        // !! NEEDS TESTED W PD !!
+
+        // clamp
+        if (desired_current > 32.0f){
+            desired_current = 32.0f;
+        } else if (desired_current < -32.0f) {
+            desired_current = -32.0f;
+        }
+
+        // convert to the +/- 2000 range the servo requires
+        float desired_current_send = desired_current*(2000/32);
+
+
+        int desired_current_int = (int)(desired_current_send);
+        unsigned char const * desired_current_array = reinterpret_cast<unsigned char const *>(&desired_current_int);
+
+        frame.can_id = servo_id;
+        frame.can_dlc = can_dlc;
+
+        // torque current cmnd
+        frame.data[0] = 0xA1;
+        frame.data[1] = 0x00;
+        frame.data[2] = 0x00;
+        frame.data[3] = 0x00;
+        frame.data[4] = desired_current_array[0];
+        frame.data[5] = desired_current_array[1];
+        frame.data[6] = 0x00;
+        frame.data[7] = 0x00;
+
+        nbytes = sendto(s, &frame, sizeof(struct can_frame),
+                0, (struct sockaddr*)&addr, sizeof(addr));
+
+        if (nbytes <= 0){
+            perror("Error in torque cmnd send");
+            stat = EXIT_FAILURE;
+        }
+
+        // now read reply
+        nbytes = recvfrom(s, &frame, sizeof(struct can_frame),
+                0, (struct sockaddr*)&addr, &len);
+
+        if (nbytes == 0){
+            perror("Read zero bytes in torque cmnd");
+            stat = EXIT_FAILURE;
+        }
+
+        // reply is a motor status command, which we dont care about here.
+
+        return stat;
+    }
 };
 
 
@@ -290,6 +347,8 @@ int main (int argc, char *argv[]){
     // stat = cmdr.set_pid_gains(0, 0,
     //                           0, 0,
     //                           1, 0);
+
+    sleep(2); // give time to queue up listener for experiment
 
     printf("Sending 1st slew command... \n");
     cmdr.go_to_angle(45.0f, 10.0f);
